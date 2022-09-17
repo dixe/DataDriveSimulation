@@ -3,38 +3,45 @@ use simulation as sim;
 use nalgebra::vector;
 use nalgebra as na;
 use std::time::Instant;
-use gl_lib::{gl, helpers, objects::sphere, shader::{self, Shader}, camera};
+use gl_lib::{gl, helpers, objects::{sphere, cube}, shader::{self, Shader}, camera};
 use gl_lib::sdl2::keyboard::Keycode;
 use gl_lib::controller;
 
 fn main() {
     //multiple();
     let state = collision();
+
     run_with_render(state);
 }
 
 
 fn collision() -> sim::State {
-    // wait for input
-
-    //let mut line = String::new();
-    //std::io::stdin().read_line(&mut line).unwrap(); // including '\n'
-
     let mut state = sim::State::new();
 
-    state.add_ball(vector![-9.0, 0.0, 0.0], vector![5.0,0.0,0.0], 1.0, 2.0);
+    state.add_ball(vector![-5.0, 0.0, 0.0], vector![5.0,0.0,0.0], 1.0, 2.0);
 
     state.add_ball(vector![0.0, 0.0, 0.0], vector![0.0,0.2,0.0], 0.5, 0.1);
 
     state.add_ball(vector![5.0, 0.0, 0.0], vector![-2.5,0.0,0.0], 2.5, 4.0);
 
+    state.add_wall(vector![-10.0, 0.0, 0.0], vector![1.0, 5.0, 10.0]);
+
     state
-/*    let mut state = sim::State::new();
-
-    add_grid(10,10, &mut state);
-*/
 
 
+}
+
+fn wall_test() -> sim::State {
+
+    let mut state = sim::State::new();
+
+    state.add_ball(vector![-5.0, 0.0, 0.0], vector![5.0,0.0,0.0], 1.0, 2.0);
+
+    state.add_wall(vector![0.0, 0.0, 0.0], vector![1.0, 2.0, 10.0]);
+
+    state.add_wall(vector![-7.0, 0.0, 0.0], vector![1.0, 2.0, 10.0]);
+
+    state
 }
 
 fn run_with_render(mut state: sim::State) {
@@ -52,8 +59,12 @@ fn run_with_render(mut state: sim::State) {
     let width = sdl_setup.width;
 
     let mut camera = camera::Camera::new(width as f32, height as f32);
-    let shader = create_shader(&gl);
+    let sphere_shader = create_sphere_shader(&gl);
+    let cube_shader = create_cube_shader(&gl);
+
     let sphere = sphere::Sphere::new(&gl, 10, 10);
+
+    let cube = cube::Cube::new(&gl);
 
 
     // Set background color to white
@@ -64,8 +75,8 @@ fn run_with_render(mut state: sim::State) {
     }
 
 
-    camera.move_to(na::Vector3::new(10.0, 10.0, 1.0));
-    camera.look_at(na::Vector3::new(0.0, 0.0, 0.0));
+    camera.move_to(na::Vector3::new(-6.0, 10.0, 0.0));
+    camera.look_at(na::Vector3::new(-6.0, 0.0, 0.0));
 
     let mut instant = Instant::now();
     let mut accumulator = 0.0;
@@ -80,8 +91,11 @@ fn run_with_render(mut state: sim::State) {
 
     let light_pos = na::Vector3::new(0.0, 0.0, 5.0);
 
-    shader.set_vec3(gl, "lightPos", light_pos);
-    shader.set_vec3(gl, "lightColor", na::Vector3::new(1.0, 1.0, 1.0));
+    sphere_shader.set_vec3(gl, "lightPos", light_pos);
+    sphere_shader.set_vec3(gl, "lightColor", na::Vector3::new(1.0, 1.0, 1.0));
+
+    cube_shader.set_vec3(gl, "lightPos", light_pos);
+    cube_shader.set_vec3(gl, "lightColor", na::Vector3::new(1.0, 1.0, 1.0));
 
     let mut camera_controller : camera::Controller = Default::default();
     let mut event_pump = sdl.event_pump().unwrap();
@@ -123,30 +137,74 @@ fn run_with_render(mut state: sim::State) {
             gl.Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
         }
 
-        shader.set_mat4(&gl, "view", camera.view());
-        shader.set_mat4(&gl, "projection", camera.projection());
 
+        let ri = RenderInfo {
+            gl,
+            sphere_shader: & sphere_shader,
+            sphere: &sphere,
+            camera: &camera,
+            colors: &colors,
+            cube: &cube,
+            cube_shader: &cube_shader
 
+        };
 
-        let mut i = 0;
-        // Render each Sphere
-        for pos in &kb_state.state.active_entities.positions {
-
-            shader.set_vec3(&gl, "color", colors[i % 3]);
-            let model_mat = na::Matrix4::new_translation(pos);
-            shader.set_mat4(&gl, "model", model_mat);
-            shader.set_f32(&gl, "radius", kb_state.state.active_entities.radius[i]);
-            sphere.render(gl);
-            i +=1;
-        }
-
-
+        render_spheres(&kb_state.state, &ri);
+        render_walls(&kb_state.state, &ri);
 
         window.gl_swap_window();
 
     }
 }
 
+
+struct RenderInfo<'a> {
+    gl: &'a gl::Gl,
+    sphere_shader: &'a shader::BaseShader,
+    cube_shader: &'a shader::BaseShader,
+    sphere: &'a sphere::Sphere,
+    cube: &'a cube::Cube,
+    camera: &'a camera::Camera,
+    colors: &'a Vec::<sim::V3>
+}
+
+fn render_spheres(state: &sim::State, ri: &RenderInfo) {
+
+    ri.sphere_shader.set_mat4(ri.gl, "view", ri.camera.view());
+    ri.sphere_shader.set_mat4(ri.gl, "projection", ri.camera.projection());
+
+    let mut i = 0;
+    // Render each Sphere
+    for pos in &state.spheres.positions {
+
+        ri.sphere_shader.set_vec3(ri.gl, "color", ri.colors[i % 3]);
+        let model_mat =  na::Matrix4::new_translation(pos);
+        ri.sphere_shader.set_mat4(ri.gl, "model", model_mat);
+        ri.sphere_shader.set_f32(ri.gl, "radius", state.spheres.radius[i]);
+        ri.sphere.render(ri.gl);
+        i +=1;
+    }
+}
+
+fn render_walls(state: &sim::State, ri: &RenderInfo) {
+
+    ri.cube_shader.set_mat4(ri.gl, "view", ri.camera.view());
+    ri.cube_shader.set_mat4(ri.gl, "projection", ri.camera.projection());
+
+    let mut i = 0;
+    // Render each Sphere
+
+    for pos in &state.walls.positions {
+        ri.cube_shader.set_vec3(ri.gl, "color", ri.colors[i % 3]);
+        let mut model_mat = na::Matrix4::identity();
+        model_mat = model_mat.prepend_nonuniform_scaling(&state.walls.sizes[i]);
+        model_mat =model_mat.append_translation(pos);
+        ri.cube_shader.set_mat4(ri.gl, "model", model_mat);
+        ri.cube.render(ri.gl);
+        i +=1;
+    }
+
+}
 
 
 fn setup_keyboard_mapping() -> controller::ControllerMapping<KbState> {
@@ -178,7 +236,7 @@ fn pause(state: &mut KbState) {
 
 
 
-fn create_shader(gl: &gl::Gl) -> shader::BaseShader {
+fn create_sphere_shader(gl: &gl::Gl) -> shader::BaseShader {
     let vert_source = r"#version 330 core
 layout (location = 0) in vec3 aPos;
 
@@ -245,6 +303,81 @@ void main()
 
   FragColor = vec4( (ambient + diffuse + specular) * col, 1.0f);
 
+}";
+
+
+    shader::BaseShader::new(gl, vert_source, frag_source).unwrap()
+}
+
+
+
+fn create_cube_shader(gl: &gl::Gl) -> shader::BaseShader {
+    let vert_source = r"#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aColor;
+
+
+out VS_OUTPUT {
+   vec3 FragPos;
+   flat vec3 Normal;
+} OUT;
+
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+
+void main()
+{
+    OUT.Normal = normalize(aPos);
+    vec4 pos = vec4(aPos,1.0);
+
+    OUT.FragPos = vec3(model * pos);
+    gl_Position =  projection * view * model * pos;
+}";
+
+    let frag_source = r"#version 330 core
+out vec4 FragColor;
+uniform vec3 color;
+
+
+uniform vec3 lightColor;
+uniform vec3 lightPos;
+uniform vec3 viewPos;
+
+
+in VS_OUTPUT {
+   vec3 FragPos;
+   flat vec3 Normal;
+} IN;
+
+void main()
+{
+  vec3 col = color;
+
+  // ABIENT
+  float ambientStrength = 0.5;
+  vec3 ambient = ambientStrength * lightColor;
+
+
+  //DIFFUSE
+  vec3 norm = normalize(IN.Normal);
+  vec3 lightDir = normalize(lightPos - IN.FragPos);
+  float diff = max(dot(norm, lightDir), 0.0);
+
+  vec3 diffuse = (diff * lightColor) * 0.70;
+
+
+  // SPECULAR
+  float specularStrength = 0.1;
+  vec3 viewDir = normalize(viewPos - IN.FragPos);
+  vec3 reflectionDir = reflect(-lightDir, IN.Normal);
+
+  float spec = pow(max(dot(viewDir, reflectionDir), 0.0), 5);
+  vec3 specular = specularStrength * spec * lightColor;
+
+
+  FragColor = vec4( (ambient + diffuse + specular) * col, 1.0f);
 
 }";
 

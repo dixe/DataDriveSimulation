@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use nalgebra as na;
+use nalgebra::vector;
+
 
 pub type EntityId = usize;
 pub type V3 = na::Vector3::<f32>;
@@ -8,7 +10,8 @@ pub type V3 = na::Vector3::<f32>;
 #[derive(Debug)]
 pub struct State {
     next_id: EntityId,
-    pub active_entities: ActiveElements,
+    pub spheres: ActiveSpheres,
+    pub walls: Walls,
 }
 
 
@@ -16,7 +19,8 @@ impl State {
     pub fn new() -> Self {
         Self {
             next_id: 1,
-            active_entities: ActiveElements::new()
+            spheres: ActiveSpheres::new(),
+            walls: Walls::new()
         }
     }
 
@@ -24,7 +28,7 @@ impl State {
     pub fn add_ball(&mut self, pos: V3, vel: V3, r: f32, mass: f32) -> EntityId {
         let id = self.next_id;
         self.next_id += 1;
-        self.active_entities.add_entity(NewBall {
+        self.spheres.add_entity(NewBall {
             id,
             pos,
             vel,
@@ -33,6 +37,10 @@ impl State {
         });
 
         id
+    }
+
+    pub fn add_wall(&mut self, pos: V3, size: V3) {
+        self.walls.add_wall(pos, size);
     }
 }
 
@@ -50,14 +58,14 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
     // parially from
     //https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-custom-2d-physics-engine-the-basics-and-impulse-resolution--gamedev-6331
 
-    let count = state.active_entities.count();
+    let count = state.spheres.count();
 
     let mut res : Vec::<Manifold>= vec![Default::default(); count];
 
-    let pos = &state.active_entities.positions;
-    let vel = &state.active_entities.velocities;
-    let radius = &state.active_entities.radius;
-    let mass = &state.active_entities.mass;
+    let pos = &state.spheres.positions;
+    let vel = &state.spheres.velocities;
+    let radius = &state.spheres.radius;
+    let mass = &state.spheres.mass;
 
     for i in 0..count {
         for j in (i + 1)..count {
@@ -102,19 +110,82 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
     }
 
     res
+}
 
+
+
+fn impulse_walls(state: &mut State, manifolds: &mut Vec::<Manifold>) {
+
+    let count = state.spheres.count();
+
+    let pos = &state.spheres.positions;
+    let vel = &state.spheres.velocities;
+    let radius = &state.spheres.radius;
+    let mass = &state.spheres.mass;
+
+
+    let wall_p = &state.walls.positions;
+    let sizes = &state.walls.sizes;
+
+    let wall_count = state.walls.count();
+
+    for i in 0..count {
+        for w_i in 0..wall_count {
+            let n = wall_p[w_i] - pos[i];
+            let extent = sizes[w_i]/ 2.0;
+
+            let closest =  na::clamp(n, -extent, extent);
+
+            let closest = vector![
+                na::clamp(n.x, -extent.x, extent.x),
+                na::clamp(n.y, -extent.y, extent.y),
+                na::clamp(n.z, -extent.z, extent.z)];
+
+            // TODO: maybe handle closest==n that means center of sphere is inside the cube
+
+            let mut normal = (wall_p[w_i] - closest) - pos[i];
+            let dist = normal.norm();
+            normal = normal.normalize();
+
+
+            if dist <= radius[i] {
+                // collision
+
+
+                let vel_along_norm = vel[i].dot(&normal);
+
+                let resitution = 1.0;
+
+                let mut impulse_scalar = (1.0 + resitution) * vel_along_norm;
+                impulse_scalar /= 1.0/mass[i];
+
+                let impulse : V3 = normal * impulse_scalar;
+                manifolds[i].vel_change -= 1.0/mass[i] * impulse;
+
+
+                let percent = 0.1; // between 0.2 and 0.8 usually
+
+                let pen_depth = radius[i] - dist;
+                let correction : V3 = (pen_depth / 1.0/mass[i]) * percent * normal;
+
+                manifolds[i].pos_correction -= 1.0/mass[i] * correction;
+            }
+        }
+    }
 }
 
 
 pub fn step(state: &mut State, dt: f32) {
 
-    let count = state.active_entities.count();
+    let count = state.spheres.count();
     // get acceleration of each ball, calculated from collision
-    let manifolds = impulse_manifolds(state);
+    let mut manifolds = impulse_manifolds(state);
+
+    impulse_walls(state, &mut manifolds);
 
     //
-    let pos = &mut state.active_entities.positions;
-    let vel = &mut state.active_entities.velocities;
+    let pos = &mut state.spheres.positions;
+    let vel = &mut state.spheres.velocities;
 
 
     for i in 0..count {
@@ -127,7 +198,7 @@ pub fn step(state: &mut State, dt: f32) {
 
 
 #[derive(Debug)]
-pub struct ActiveElements {
+pub struct ActiveSpheres {
     id_to_index : HashMap::<EntityId,usize>,
     pub positions: Vec::<V3>,
     pub velocities: Vec::<V3>,
@@ -135,7 +206,7 @@ pub struct ActiveElements {
     pub mass: Vec::<f32>,
 }
 
-impl ActiveElements {
+impl ActiveSpheres {
 
     pub fn new() -> Self {
         Self {
@@ -171,4 +242,31 @@ pub struct NewBall {
     pub vel: V3,
     pub radius: f32,
     pub mass : f32
+}
+
+
+#[derive(Debug)]
+pub struct Walls {
+    pub positions: Vec::<V3>, // center position of wall
+    pub sizes: Vec::<V3>, // size is width, depth and height, with
+        // rotation
+}
+
+impl Walls {
+    pub fn new() -> Self {
+        Self {
+            positions: vec![],
+            sizes: vec![]
+        }
+    }
+
+    pub fn count(&self) -> usize {
+        self.positions.len()
+    }
+
+    pub fn add_wall(&mut self, center: V3, size: V3) {
+        self.positions.push(center);
+        self.sizes.push(size);
+
+    }
 }
