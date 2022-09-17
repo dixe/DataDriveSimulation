@@ -9,7 +9,7 @@ A simple simpulation with at free moving camera
 
 # Goals
 * [ ] Ground plane and support for plane/box walls
-* [ ] Simulation of ball that can bounce. Like pool
+* [x] Simulation of ball that can bounce. Like pool
 
 
 ## Extra goals

@@ -45,7 +45,7 @@ struct Manifold {
 
 
 
-fn impulse_manifolds(state: &mut State) -> Vec::<Manifold> {
+fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
 
     // parially from
     //https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-custom-2d-physics-engine-the-basics-and-impulse-resolution--gamedev-6331
@@ -56,8 +56,8 @@ fn impulse_manifolds(state: &mut State) -> Vec::<Manifold> {
 
     let pos = &state.active_entities.positions;
     let vel = &state.active_entities.velocities;
-    let radius = & state.active_entities.radius;
-    let mass = & state.active_entities.mass;
+    let radius = &state.active_entities.radius;
+    let mass = &state.active_entities.mass;
 
     for i in 0..count {
         for j in (i + 1)..count {
@@ -116,12 +116,11 @@ pub fn step(state: &mut State, dt: f32) {
     let pos = &mut state.active_entities.positions;
     let vel = &mut state.active_entities.velocities;
 
+
     for i in 0..count {
         vel[i] += manifolds[i].vel_change;
         pos[i] += vel[i] * dt + manifolds[i].pos_correction;
-
     }
-
 }
 
 

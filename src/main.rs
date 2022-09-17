@@ -7,7 +7,7 @@ use gl_lib::{gl, helpers, objects::sphere, shader::{self, Shader}, camera};
 
 
 fn main() {
-    multiple();
+    //multiple();
     collision();
 }
 
@@ -26,12 +26,15 @@ fn collision() {
 
     state.add_ball(vector![5.0, 0.0, 0.0], vector![-0.5,0.0,0.0], 2.5, 4.0);
 
+/*    let mut state = sim::State::new();
 
+    add_grid(10,10, &mut state);
+*/
     run_with_render(state);
 
 }
 
-fn run_with_render(state: sim::State) {
+fn run_with_render(mut state: sim::State) {
 
     // setup render
     let sdl_setup = helpers::setup_sdl().unwrap();
@@ -79,15 +82,17 @@ fn run_with_render(state: sim::State) {
 
     let mut controller : camera::Controller = Default::default();
     let mut event_pump = sdl.event_pump().unwrap();
-    controller.speed = 3.0;
+    controller.speed = 10.0;
 
     loop {
 
         for event in event_pump.poll_iter() {
-            controller.update_events(event);
+            // maybe return consumed
+            controller.update_events(&sdl.mouse(), &window, event);
         }
 
         let delta = (instant.elapsed().as_millis() as f32) / 1000.0;
+
         controller.update_camera(&mut camera, delta);
 
 
@@ -97,11 +102,9 @@ fn run_with_render(state: sim::State) {
 
         // Simulation part
         while accumulator >= sim_step_time {
-            //sim::step(&mut state, sim_step_time);
+            sim::step(&mut state, sim_step_time);
             accumulator -= sim_step_time;
         }
-
-
 
 
         // Rendering
@@ -118,7 +121,7 @@ fn run_with_render(state: sim::State) {
         // Render each Sphere
         for pos in &state.active_entities.positions {
 
-            shader.set_vec3(&gl, "color", colors[i]);
+            shader.set_vec3(&gl, "color", colors[i % 3]);
             let model_mat = na::Matrix4::new_translation(pos);
             shader.set_mat4(&gl, "model", model_mat);
             shader.set_f32(&gl, "radius", state.active_entities.radius[i]);
@@ -132,6 +135,8 @@ fn run_with_render(state: sim::State) {
 
     }
 }
+
+
 
 
 
@@ -215,7 +220,7 @@ fn multiple() {
 
     add_grid(10,10, &mut state);
 
-    let time_inst = Instant::now();
+    let mut time_inst = Instant::now();
 
     let mut iters = 0;
 
@@ -223,7 +228,10 @@ fn multiple() {
         sim::step(&mut state, 0.01);
         iters += 1;
         if iters % 10000 == 0 {
-            println!("iter/ms: {:.2?}", (iters as f32) / (time_inst.elapsed().as_millis() as f32));
+            let iter_pr_ms = (iters as f32) / (time_inst.elapsed().as_millis() as f32);
+            println!("iter/ms: {:.2?}", iter_pr_ms);
+            time_inst = Instant::now();
+            iters = 0
         }
     }
 }
@@ -233,7 +241,7 @@ fn add_grid(x: i32, y: i32, state: &mut sim::State) {
 
     for x in (-x/2)..(x/2) {
         for y in (-y/2)..(y/2) {
-            state.add_ball(vector![x as f32, y as f32, 0.0], vector![1.0,0.0,0.0], 3.0, 1.0);
+            state.add_ball(vector![x as f32, y as f32, 0.0], vector![1.0*(y as f32), 1.0/ (x as f32),0.0], 0.1, 1.0);
         }
     }
 }
