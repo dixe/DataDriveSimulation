@@ -4,15 +4,17 @@ use nalgebra::vector;
 use nalgebra as na;
 use std::time::Instant;
 use gl_lib::{gl, helpers, objects::sphere, shader::{self, Shader}, camera};
-
+use gl_lib::sdl2::keyboard::Keycode;
+use gl_lib::controller;
 
 fn main() {
     //multiple();
-    collision();
+    let state = collision();
+    run_with_render(state);
 }
 
 
-fn collision() {
+fn collision() -> sim::State {
     // wait for input
 
     //let mut line = String::new();
@@ -20,17 +22,18 @@ fn collision() {
 
     let mut state = sim::State::new();
 
-    state.add_ball(vector![-9.0, 0.0, 0.0], vector![2.0,0.0,0.0], 1.0, 2.0);
+    state.add_ball(vector![-9.0, 0.0, 0.0], vector![5.0,0.0,0.0], 1.0, 2.0);
 
     state.add_ball(vector![0.0, 0.0, 0.0], vector![0.0,0.2,0.0], 0.5, 0.1);
 
-    state.add_ball(vector![5.0, 0.0, 0.0], vector![-0.5,0.0,0.0], 2.5, 4.0);
+    state.add_ball(vector![5.0, 0.0, 0.0], vector![-2.5,0.0,0.0], 2.5, 4.0);
 
+    state
 /*    let mut state = sim::State::new();
 
     add_grid(10,10, &mut state);
 */
-    run_with_render(state);
+
 
 }
 
@@ -48,7 +51,7 @@ fn run_with_render(mut state: sim::State) {
     let height = sdl_setup.height;
     let width = sdl_setup.width;
 
-    let mut camera = camera::Camera::new( width as f32, height as f32);
+    let mut camera = camera::Camera::new(width as f32, height as f32);
     let shader = create_shader(&gl);
     let sphere = sphere::Sphere::new(&gl, 10, 10);
 
@@ -80,32 +83,40 @@ fn run_with_render(mut state: sim::State) {
     shader.set_vec3(gl, "lightPos", light_pos);
     shader.set_vec3(gl, "lightColor", na::Vector3::new(1.0, 1.0, 1.0));
 
-    let mut controller : camera::Controller = Default::default();
+    let mut camera_controller : camera::Controller = Default::default();
     let mut event_pump = sdl.event_pump().unwrap();
-    controller.speed = 10.0;
+    camera_controller.speed = 10.0;
+
+    let mut kb_map = setup_keyboard_mapping();
+
+    let mut kb_state = KbState { state, paused: false };
 
     loop {
 
         for event in event_pump.poll_iter() {
             // maybe return consumed
-            controller.update_events(&sdl.mouse(), &window, event);
+            camera_controller.update_events(&sdl.mouse(), event.clone());
+            controller::on_input(event, &kb_map, &mut kb_state);
         }
 
         let delta = (instant.elapsed().as_millis() as f32) / 1000.0;
-
-        controller.update_camera(&mut camera, delta);
-
-
         instant = Instant::now();
 
-        accumulator += delta * speed;
+        camera_controller.update_camera(&mut camera, delta);
 
-        // Simulation part
-        while accumulator >= sim_step_time {
-            sim::step(&mut state, sim_step_time);
-            accumulator -= sim_step_time;
+
+        if !kb_state.paused {
+
+
+
+            accumulator += delta * speed;
+
+            // Simulation part
+            while accumulator >= sim_step_time {
+                sim::step(&mut kb_state.state, sim_step_time);
+                accumulator -= sim_step_time;
+            }
         }
-
 
         // Rendering
         unsafe {
@@ -119,12 +130,12 @@ fn run_with_render(mut state: sim::State) {
 
         let mut i = 0;
         // Render each Sphere
-        for pos in &state.active_entities.positions {
+        for pos in &kb_state.state.active_entities.positions {
 
             shader.set_vec3(&gl, "color", colors[i % 3]);
             let model_mat = na::Matrix4::new_translation(pos);
             shader.set_mat4(&gl, "model", model_mat);
-            shader.set_f32(&gl, "radius", state.active_entities.radius[i]);
+            shader.set_f32(&gl, "radius", kb_state.state.active_entities.radius[i]);
             sphere.render(gl);
             i +=1;
         }
@@ -136,6 +147,33 @@ fn run_with_render(mut state: sim::State) {
     }
 }
 
+
+
+fn setup_keyboard_mapping() -> controller::ControllerMapping<KbState> {
+    let mut kb_map = controller::ControllerMapping::new();
+
+    use Keycode::*;
+    kb_map.exit(Keycode::Escape);
+    kb_map.add_on_press(Keycode::R, reset);
+    kb_map.add_on_press(P, pause);
+
+    kb_map
+}
+
+
+
+struct KbState {
+    state:  sim::State,
+    paused: bool
+}
+
+fn reset(state: &mut KbState) {
+    state.state = collision();
+}
+
+fn pause(state: &mut KbState) {
+    state.paused = !state.paused;
+}
 
 
 
