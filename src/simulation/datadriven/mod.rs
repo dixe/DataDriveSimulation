@@ -61,42 +61,44 @@ struct Manifold {
 
 
 
-fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
+fn impulse_manifolds(state: &mut State) {
 
     // parially from
     //https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-custom-2d-physics-engine-the-basics-and-impulse-resolution--gamedev-6331
 
     let count = state.spheres.count();
 
-    let mut res : Vec::<Manifold>= vec![Default::default(); count];
+    //let mut res : Vec::<Manifold>= vec![Default::default(); count];
 
-    let pos = &state.spheres.positions;
+   let pos = &state.spheres.positions;
     let vel = &state.spheres.velocities;
     let radius = &state.spheres.radius;
     let mass = &state.spheres.mass;
 
+    let mut query_res = vec![];
+    let mut ids : Vec::<usize> = vec![];
+
     for i in 0..count {
 
-
-        let query_p = Query::point(pos[i].x as i32, pos[i].y as i32);
-
-        let near_p = state.spheres.positions2.query(&query_p);
-
+        query_res.clear();
+        ids.clear();
 
         let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
                                   Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
 
-        let near_element_ids = state.spheres.positions2.query(&Query::rect(r));
+        state.spheres.positions2.query(r, &mut query_res);
 
-        let mut ids : Vec::<usize> = near_element_ids.iter().map(|e_id| state.spheres.qt_id_to_index(*e_id)).collect();
+        for &q_id in &query_res {
+            ids.push(state.spheres.qt_id_to_index(q_id))
+        }
+        //let mut ids : Vec::<usize> = near_element_ids.iter().map(|e_id| state.spheres.qt_id_to_index(*e_id)).collect();
 
-        ids.sort();
-
-
+        //ids.sort();
 
         //for j in (i + 1)..count {
 
-        for j in ids {
+
+        for &j in &ids {
             if j <= i{
                 continue;
             }
@@ -120,7 +122,7 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
                 }
 
                 // can also be so each ball has its own, then use lowest
-                let resitution = 1.0; // elasicity e = rel_vel_after_col / rel_vel_before, so 1 is all energy preserved,
+                let resitution = 0.8; // elasicity e = rel_vel_after_col / rel_vel_before, so 1 is all energy preserved,
 
                 let mut impulse_scalar = -(1.0 + resitution) * vel_along_norm;
                 impulse_scalar /= 1.0/mass[i] + 1.0/mass[j];
@@ -128,23 +130,26 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
                 let impulse : V3 = col_norm * impulse_scalar;
 
 
-                res[i].vel_change -= 1.0/mass[i] * impulse;
-                res[j].vel_change += 1.0/mass[j] * impulse;
+                state.spheres.manifolds[i].vel_change -= 1.0/mass[i] * impulse;
+                state.spheres.manifolds[j].vel_change += 1.0/mass[j] * impulse;
 
                 let percent = 0.1; // between 0.2 and 0.8 usually
                 let correction : V3 = pen_depth / (1.0/mass[i] + 1.0/mass[j]) * percent * col_norm;
-                res[i].pos_correction -= 1.0/mass[i] * correction;
-                res[j].pos_correction += 1.0/mass[j] * correction;
+
+                state.spheres.manifolds[i].pos_correction -= 1.0/mass[i] * correction;
+                state.spheres.manifolds[j].pos_correction += 1.0/mass[j] * correction;
+
+
             }
         }
     }
 
-    res
+    //res
 }
 
 
 
-fn impulse_walls(state: &mut State, manifolds: &mut Vec::<Manifold>) {
+fn impulse_walls(state: &mut State) {
 
     let count = state.spheres.count();
 
@@ -190,15 +195,15 @@ fn impulse_walls(state: &mut State, manifolds: &mut Vec::<Manifold>) {
                 impulse_scalar /= 1.0/mass[i];
 
                 let impulse : V3 = normal * impulse_scalar;
-                manifolds[i].vel_change -= 1.0/mass[i] * impulse;
-
+                state.spheres.manifolds[i].vel_change -= 1.0/mass[i] * impulse;
 
                 let percent = 0.1; // between 0.2 and 0.8 usually
 
                 let pen_depth = radius[i] - dist;
                 let correction : V3 = (pen_depth / 1.0/mass[i]) * percent * normal;
 
-                manifolds[i].pos_correction -= 1.0/mass[i] * correction;
+                state.spheres.manifolds[i].pos_correction -= 1.0/mass[i] * correction;
+
             }
         }
     }
@@ -209,9 +214,23 @@ pub fn step(state: &mut State, dt: f32) {
 
     let count = state.spheres.count();
     // get acceleration of each ball, calculated from collision
-    let mut manifolds = impulse_manifolds(state);
 
-    impulse_walls(state, &mut manifolds);
+    for i in 0..count {
+        state.spheres.manifolds[i].vel_change.x = 0.0;
+        state.spheres.manifolds[i].vel_change.y = 0.0;
+        state.spheres.manifolds[i].vel_change.z = 0.0;
+
+        state.spheres.manifolds[i].pos_correction.x = 0.0;
+        state.spheres.manifolds[i].pos_correction.y = 0.0;
+        state.spheres.manifolds[i].pos_correction.z = 0.0;
+
+    }
+
+
+
+    impulse_manifolds(state);
+
+    impulse_walls(state);
 
     //
     let pos = &mut state.spheres.positions;
@@ -219,8 +238,8 @@ pub fn step(state: &mut State, dt: f32) {
 
 
     for i in 0..count {
-        vel[i] += manifolds[i].vel_change;
-        pos[i] += vel[i] * dt + manifolds[i].pos_correction;
+        vel[i] += state.spheres.manifolds[i].vel_change;
+        pos[i] += vel[i] * dt + state.spheres.manifolds[i].pos_correction;
     }
 
     // reorder quadtree
@@ -239,6 +258,7 @@ struct ActiveSpheres {
     velocities: Vec::<V3>,
     radius: Vec::<f32>,
     mass: Vec::<f32>,
+    manifolds: Vec::<Manifold>
 }
 
 impl ActiveSpheres {
@@ -246,7 +266,7 @@ impl ActiveSpheres {
     pub fn new() -> Self {
         let mut qt = QuadTree::new(Rect::from_points(Point {x: -128, y: -128}, Point { x: 128, y: 128}));
 
-        qt.set_elements_per_node(30);
+        qt.set_elements_per_node(6);
         Self {
             qt_id_to_index : HashMap::new(),
             id_to_qt_id : HashMap::new(),
@@ -254,6 +274,7 @@ impl ActiveSpheres {
             velocities: vec![],
             radius: vec![],
             mass: vec![],
+            manifolds: vec![],
             positions2: qt,
         }
     }
@@ -283,6 +304,9 @@ impl ActiveSpheres {
         self.velocities.push(new.vel);
         self.radius.push(new.radius);
         self.mass.push(new.mass);
+        self.manifolds.push(Manifold {
+            vel_change : vector![0.0, 0.0, 0.0],
+            pos_correction: vector![0.0, 0.0, 0.0]});
         index
     }
 
