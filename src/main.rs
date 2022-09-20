@@ -11,9 +11,7 @@ mod render;
 fn main() {
     flamegraph();
 
-    let mut state = sim::State::new();
-
-    add_grid(30,10, &mut state);
+    let mut state = collision();
 
     #[cfg(feature = "sdl")]
     render::run_with_render(state);
@@ -23,16 +21,18 @@ fn main() {
 pub fn collision() -> sim::State {
     let mut state = sim::State::new();
 
-    state.add_ball(vector![-50.0, 0.0, 0.0], vector![30.0,0.0,0.0], 1.0, 2.0);
+    add_grid(5, 5, &mut state);
 
-    //state.add_ball(vector![0.0, 0.0, 0.0], vector![0.0,0.0,0.0], 0.5, 0.1);
+    state.add_ball(vector![-100.0, 0.0, 0.0], vector![30.0,0.0,0.0], 1.0, 2.0);
+
+    state.add_ball(vector![0.0, 10.0, 0.0], vector![0.0,0.0,0.0], 0.5, 0.1);
 
     state.add_ball(vector![5.0, 0.0, 0.0], vector![-2.5,0.0,0.0], 2.5, 4.0);
 
 
     state.add_ball(vector![70.0, 0.0, 0.0], vector![0.0, 0.0, 0.0], 1.5, 2.0);
 
-    //state.add_wall(vector![-10.0, 0.0, 0.0], vector![1.0, 5.0, 10.0]);
+    state.add_wall(vector![-10.0, 0.0, 0.0], vector![1.0, 5.0, 10.0]);
 
     state
 
@@ -56,7 +56,7 @@ fn wall_test() -> sim::State {
 fn flamegraph() {
     let mut state = sim::State::new();
 
-    add_grid(30,10, &mut state);
+    add_grid(30, 10, &mut state);
 
     let mut time_inst = Instant::now();
 
@@ -87,6 +87,7 @@ fn add_grid(x: i32, y: i32, state: &mut sim::State) {
 
     for x in (-x/2)..(x/2) {
         for y in (-y/2)..(y/2) {
+            //state.add_ball(vector![x as f32, y as f32, 0.0], vector![ 0.0, 0.0, 0.0], 0.1, 0.001);
             state.add_ball(vector![x as f32, y as f32, 0.0], vector![1.0*(y as f32), 1.0/ (x as f32),0.0], 0.1, 1.0);
         }
     }

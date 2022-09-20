@@ -75,13 +75,12 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
     let radius = &state.spheres.radius;
     let mass = &state.spheres.mass;
 
-
-
     for i in 0..count {
 
         let query_p = Query::point(pos[i].x as i32, pos[i].y as i32);
 
         //let near_p = state.spheres.positions2.query(&query_p);
+
 
         let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
                                   Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
@@ -221,7 +220,7 @@ pub fn step(state: &mut State, dt: f32) {
     }
 
     // reorder quadtree
-    state.spheres.order_tree();
+    //state.spheres.order_tree();
 }
 
 
@@ -241,6 +240,9 @@ struct ActiveSpheres {
 impl ActiveSpheres {
 
     pub fn new() -> Self {
+        let mut qt = QuadTree::new(Rect::from_points(Point {x: -128, y: -128}, Point { x: 128, y: 128}));
+
+        qt.set_elements_per_node(50);
         Self {
             id_to_index : HashMap::new(),
             id_to_qt_id : HashMap::new(),
@@ -248,7 +250,7 @@ impl ActiveSpheres {
             velocities: vec![],
             radius: vec![],
             mass: vec![],
-            positions2: QuadTree::new(Rect::from_points(Point {x: -128, y: -128}, Point { x: 128, y: 128}))
+            positions2: qt,
         }
     }
 
@@ -263,15 +265,16 @@ impl ActiveSpheres {
 
     pub fn add_entity(&mut self, new: NewBall) -> usize {
 
-        let bb = Rect::from_points(Point {x: (new.pos.x - new.radius) as i32, y: (new.pos.y - new.radius) as i32},
-                                   Point {x: (new.pos.x + new.radius) as i32, y: (new.pos.y + new.radius) as i32});
-
-        let qt_id = self.positions2.insert(new.id, bb);
-        self.id_to_qt_id.insert(new.id, qt_id);
+        let bb = Rect::from_points(Point {x: (new.pos.x - new.radius).floor() as i32, y: (new.pos.y - new.radius).floor() as i32},
+                                   Point {x: (new.pos.x + new.radius). ceil()as i32, y: (new.pos.y + new.radius).ceil() as i32});
 
 
 
+        //println!("{:?}", (new.pos, new.radius, bb));
+
+        let element_id = self.positions2.insert(new.id, bb);
         let index = self.positions.len();
+
 
         self.id_to_index.insert(new.id, index);
         self.positions.push(new.pos);
@@ -283,6 +286,23 @@ impl ActiveSpheres {
 
     pub fn order_tree(&mut self) {
 
+        let count = self.positions.len();
+
+        let qt = &mut self.positions2;
+        for i in 0..count {
+            // remove i
+            qt.remove(i as i32);
+
+            let pos = self.positions[i];
+            let radius =  self.radius[i];
+            let bb = Rect::from_points(Point {x: (pos.x - radius).floor() as i32, y: (pos.y - radius).floor() as i32},
+                                       Point {x: (pos.x + radius). ceil()as i32, y: (pos.y + radius).ceil() as i32});
+            // insert at new position
+            qt.insert(i, bb);
+
+
+
+        }
 
 
     }
