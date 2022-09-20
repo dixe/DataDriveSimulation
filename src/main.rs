@@ -21,14 +21,13 @@ fn main() {
 pub fn collision() -> sim::State {
     let mut state = sim::State::new();
 
-    add_grid(5, 5, &mut state);
+    //add_grid(5, 5, &mut state);
 
-    state.add_ball(vector![-100.0, 0.0, 0.0], vector![30.0,0.0,0.0], 1.0, 2.0);
+    state.add_ball(vector![4.0, 0.0, 0.0], vector![30.0,0.0,0.0], 1.0, 2.0);
 
     state.add_ball(vector![0.0, 10.0, 0.0], vector![0.0,0.0,0.0], 0.5, 0.1);
 
     state.add_ball(vector![5.0, 0.0, 0.0], vector![-2.5,0.0,0.0], 2.5, 4.0);
-
 
     state.add_ball(vector![70.0, 0.0, 0.0], vector![0.0, 0.0, 0.0], 1.5, 2.0);
 

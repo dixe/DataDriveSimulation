@@ -85,10 +85,9 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
         let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
                                   Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
 
-        let near_r = state.spheres.positions2.query(&Query::rect(r));
+        let near_element_ids = state.spheres.positions2.query(&Query::rect(r));
 
-
-        let mut ids : Vec::<usize> = near_r.iter().map(|e_id| state.spheres.id_to_index(**e_id)).collect();
+        let mut ids : Vec::<usize> = near_element_ids.iter().map(|e_id| state.spheres.qt_id_to_index(*e_id)).collect();
 
         ids.sort();
 
@@ -220,7 +219,7 @@ pub fn step(state: &mut State, dt: f32) {
     }
 
     // reorder quadtree
-    //state.spheres.order_tree();
+    state.spheres.order_tree();
 }
 
 
@@ -228,7 +227,7 @@ pub fn step(state: &mut State, dt: f32) {
 
 #[derive(Debug)]
 struct ActiveSpheres {
-    id_to_index : HashMap::<EntityId, usize>,
+    qt_id_to_index : HashMap::<i32, usize>,
     id_to_qt_id : HashMap::<EntityId, i32>,
     positions2: QuadTree::<EntityId>,
     positions: Vec::<V3>,
@@ -242,9 +241,9 @@ impl ActiveSpheres {
     pub fn new() -> Self {
         let mut qt = QuadTree::new(Rect::from_points(Point {x: -128, y: -128}, Point { x: 128, y: 128}));
 
-        qt.set_elements_per_node(50);
+        qt.set_elements_per_node(30);
         Self {
-            id_to_index : HashMap::new(),
+            qt_id_to_index : HashMap::new(),
             id_to_qt_id : HashMap::new(),
             positions: vec![],
             velocities: vec![],
@@ -255,8 +254,8 @@ impl ActiveSpheres {
     }
 
 
-    pub fn id_to_index(&self, id: EntityId) -> usize {
-        *self.id_to_index.get(&id).unwrap()
+    pub fn qt_id_to_index(&self, qt_id: i32) -> usize {
+        *self.qt_id_to_index.get(&qt_id).unwrap()
     }
 
     pub fn count(&self) -> usize {
@@ -266,17 +265,15 @@ impl ActiveSpheres {
     pub fn add_entity(&mut self, new: NewBall) -> usize {
 
         let bb = Rect::from_points(Point {x: (new.pos.x - new.radius).floor() as i32, y: (new.pos.y - new.radius).floor() as i32},
-                                   Point {x: (new.pos.x + new.radius). ceil()as i32, y: (new.pos.y + new.radius).ceil() as i32});
+                                   Point {x: (new.pos.x + new.radius).ceil()as i32, y: (new.pos.y + new.radius).ceil() as i32});
 
-
-
-        //println!("{:?}", (new.pos, new.radius, bb));
 
         let element_id = self.positions2.insert(new.id, bb);
         let index = self.positions.len();
 
 
-        self.id_to_index.insert(new.id, index);
+        self.qt_id_to_index.insert(element_id, index);
+
         self.positions.push(new.pos);
         self.velocities.push(new.vel);
         self.radius.push(new.radius);
@@ -289,20 +286,24 @@ impl ActiveSpheres {
         let count = self.positions.len();
 
         let qt = &mut self.positions2;
-        for i in 0..count {
-            // remove i
-            qt.remove(i as i32);
+        let qt_ids : Vec<(i32, usize)> = self.qt_id_to_index.iter().map(|(&q_id, &index)| (q_id, index)).collect();
+        for &(qt_id, i) in qt_ids.iter() {
 
             let pos = self.positions[i];
             let radius =  self.radius[i];
             let bb = Rect::from_points(Point {x: (pos.x - radius).floor() as i32, y: (pos.y - radius).floor() as i32},
                                        Point {x: (pos.x + radius). ceil()as i32, y: (pos.y + radius).ceil() as i32});
+
+            qt.remove(qt_id);
+
             // insert at new position
-            qt.insert(i, bb);
+            let new_id = qt.insert(i, bb);
 
-
+            self.qt_id_to_index.insert(new_id, i);
 
         }
+
+        self.positions2.cleanup();
 
 
     }
