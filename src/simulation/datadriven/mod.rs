@@ -77,9 +77,10 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
 
     for i in 0..count {
 
+
         let query_p = Query::point(pos[i].x as i32, pos[i].y as i32);
 
-        //let near_p = state.spheres.positions2.query(&query_p);
+        let near_p = state.spheres.positions2.query(&query_p);
 
 
         let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
@@ -91,11 +92,15 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
 
         ids.sort();
 
+
+
         //for j in (i + 1)..count {
+
         for j in ids {
-            if j <= i {
+            if j <= i{
                 continue;
             }
+
 
             let dist = (pos[i]- pos[j]).norm();
 

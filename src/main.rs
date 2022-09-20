@@ -55,7 +55,7 @@ fn wall_test() -> sim::State {
 fn flamegraph() {
     let mut state = sim::State::new();
 
-    add_grid(30, 10, &mut state);
+    add_grid(30, 30, &mut state);
 
     let mut time_inst = Instant::now();
 
