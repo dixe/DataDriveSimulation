@@ -12,7 +12,6 @@ pub struct State {
     next_id: EntityId,
     pub spheres: Vec::<Sphere>,
     pub walls: Walls,
-    entities: Vec::<Entity>
 }
 
 
@@ -34,7 +33,7 @@ impl State {
             pos,
             vel,
             r,
-            mass
+            mass,
         });
 
         id
@@ -197,14 +196,13 @@ pub fn step(state: &mut State, dt: f32) {
 
 
 
-
 #[derive(Debug)]
 pub struct Sphere {
     pub id: usize,
     pub pos: V3,
     pub vel: V3,
     pub r: f32,
-    pub mass: f32
+    pub mass: f32,
 }
 
 #[derive(Debug)]

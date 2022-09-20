@@ -9,9 +9,11 @@ use std::time::Instant;
 mod render;
 
 fn main() {
-    multiple();
+    flamegraph();
 
-    let state = collision();
+    let mut state = sim::State::new();
+
+    add_grid(30,10, &mut state);
 
     #[cfg(feature = "sdl")]
     render::run_with_render(state);
@@ -21,13 +23,16 @@ fn main() {
 pub fn collision() -> sim::State {
     let mut state = sim::State::new();
 
-    state.add_ball(vector![-5.0, 0.0, 0.0], vector![5.0,0.0,0.0], 1.0, 2.0);
+    state.add_ball(vector![-50.0, 0.0, 0.0], vector![30.0,0.0,0.0], 1.0, 2.0);
 
-    state.add_ball(vector![0.0, 0.0, 0.0], vector![0.0,0.2,0.0], 0.5, 0.1);
+    //state.add_ball(vector![0.0, 0.0, 0.0], vector![0.0,0.0,0.0], 0.5, 0.1);
 
     state.add_ball(vector![5.0, 0.0, 0.0], vector![-2.5,0.0,0.0], 2.5, 4.0);
 
-    state.add_wall(vector![-10.0, 0.0, 0.0], vector![1.0, 5.0, 10.0]);
+
+    state.add_ball(vector![70.0, 0.0, 0.0], vector![0.0, 0.0, 0.0], 1.5, 2.0);
+
+    //state.add_wall(vector![-10.0, 0.0, 0.0], vector![1.0, 5.0, 10.0]);
 
     state
 
@@ -48,7 +53,7 @@ fn wall_test() -> sim::State {
 }
 
 
-fn multiple() {
+fn flamegraph() {
     let mut state = sim::State::new();
 
     add_grid(30,10, &mut state);
@@ -57,16 +62,23 @@ fn multiple() {
 
     let mut iters = 0;
 
-
+    let mut time_total = Instant::now();
     loop {
         sim::step(&mut state, 0.01);
         iters += 1;
-        if iters % 10000 == 0 {
+        if time_inst.elapsed().as_millis() as f32 > 1000.0 {
             let iter_pr_ms = (iters as f32) / (time_inst.elapsed().as_millis() as f32);
             println!("iter/ms: {:.2?}", iter_pr_ms);
             time_inst = Instant::now();
-            break;
+            iters = 0
         }
+        if time_total.elapsed().as_secs() > 10 {
+            println!("Stopping");
+            break;
+
+        }
+
+
     }
 }
 

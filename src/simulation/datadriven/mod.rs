@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use nalgebra as na;
 use nalgebra::vector;
-
+use quadtree::{QuadTree, Rect, Point, Query};
 
 pub type EntityId = usize;
 pub type V3 = na::Vector3::<f32>;
@@ -75,8 +75,30 @@ fn impulse_manifolds(state: &State) -> Vec::<Manifold> {
     let radius = &state.spheres.radius;
     let mass = &state.spheres.mass;
 
+
+
     for i in 0..count {
-        for j in (i + 1)..count {
+
+        let query_p = Query::point(pos[i].x as i32, pos[i].y as i32);
+
+        //let near_p = state.spheres.positions2.query(&query_p);
+
+        let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
+                                  Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
+
+        let near_r = state.spheres.positions2.query(&Query::rect(r));
+
+
+        let mut ids : Vec::<usize> = near_r.iter().map(|e_id| state.spheres.id_to_index(**e_id)).collect();
+
+        ids.sort();
+
+        //for j in (i + 1)..count {
+        for j in ids {
+            if j <= i {
+                continue;
+            }
+
             let dist = (pos[i]- pos[j]).norm();
 
             if radius[i] + radius[j] >= dist {
@@ -197,18 +219,23 @@ pub fn step(state: &mut State, dt: f32) {
         vel[i] += manifolds[i].vel_change;
         pos[i] += vel[i] * dt + manifolds[i].pos_correction;
     }
+
+    // reorder quadtree
+    state.spheres.order_tree();
 }
 
 
 
 
 #[derive(Debug)]
-pub struct ActiveSpheres {
-    id_to_index : HashMap::<EntityId,usize>,
-    pub positions: Vec::<V3>,
-    pub velocities: Vec::<V3>,
-    pub radius: Vec::<f32>,
-    pub mass: Vec::<f32>,
+struct ActiveSpheres {
+    id_to_index : HashMap::<EntityId, usize>,
+    id_to_qt_id : HashMap::<EntityId, i32>,
+    positions2: QuadTree::<EntityId>,
+    positions: Vec::<V3>,
+    velocities: Vec::<V3>,
+    radius: Vec::<f32>,
+    mass: Vec::<f32>,
 }
 
 impl ActiveSpheres {
@@ -216,11 +243,18 @@ impl ActiveSpheres {
     pub fn new() -> Self {
         Self {
             id_to_index : HashMap::new(),
+            id_to_qt_id : HashMap::new(),
             positions: vec![],
             velocities: vec![],
             radius: vec![],
-            mass: vec![]
+            mass: vec![],
+            positions2: QuadTree::new(Rect::from_points(Point {x: -128, y: -128}, Point { x: 128, y: 128}))
         }
+    }
+
+
+    pub fn id_to_index(&self, id: EntityId) -> usize {
+        *self.id_to_index.get(&id).unwrap()
     }
 
     pub fn count(&self) -> usize {
@@ -228,6 +262,14 @@ impl ActiveSpheres {
     }
 
     pub fn add_entity(&mut self, new: NewBall) -> usize {
+
+        let bb = Rect::from_points(Point {x: (new.pos.x - new.radius) as i32, y: (new.pos.y - new.radius) as i32},
+                                   Point {x: (new.pos.x + new.radius) as i32, y: (new.pos.y + new.radius) as i32});
+
+        let qt_id = self.positions2.insert(new.id, bb);
+        self.id_to_qt_id.insert(new.id, qt_id);
+
+
 
         let index = self.positions.len();
 
@@ -237,6 +279,12 @@ impl ActiveSpheres {
         self.radius.push(new.radius);
         self.mass.push(new.mass);
         index
+    }
+
+    pub fn order_tree(&mut self) {
+
+
+
     }
 
 }

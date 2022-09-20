@@ -10,6 +10,8 @@ nalgebra = "0.31.1"
 
 gl_lib = { path = "../rust-gl-lib", optional = true}
 
+quadtree = { path = "../quadtree"}
+
 [features]
 oop = []
 sdl = ["gl_lib"]

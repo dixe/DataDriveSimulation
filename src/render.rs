@@ -10,7 +10,6 @@ use crate::*;
 
 pub fn run_with_render(mut state: sim::State) {
 
-    println!("Render");
     // setup render
     let sdl_setup = helpers::setup_sdl().unwrap();
     let window = sdl_setup.window;
