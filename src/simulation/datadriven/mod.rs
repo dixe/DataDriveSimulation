@@ -2,16 +2,21 @@ use std::collections::HashMap;
 use nalgebra as na;
 use nalgebra::vector;
 use quadtree::{QuadTree, Rect, Point, Query};
+use std::fs;
+
+use std::path::Path;
 
 pub type EntityId = usize;
 pub type V3 = na::Vector3::<f32>;
+
+
 
 // All into regarding the simulation
 #[derive(Debug)]
 pub struct State {
     next_id: EntityId,
-    pub(crate) spheres: ActiveSpheres,
-    pub(crate) walls: Walls,
+    pub spheres: ActiveSpheres,
+    pub walls: Walls,
 }
 
 
@@ -50,6 +55,18 @@ impl State {
     pub fn sphere_positions(&self) -> &Vec::<V3> {
         &self.spheres.positions
     }
+
+    pub fn dump(&self, path: &str) {
+        let mut res = "".to_string();
+
+
+        let spheres = &self.spheres;
+        for i in 0..spheres.positions.len() {
+            res += &format!("pos:{:?}, vec: {:?}, mass: {:?}\n",spheres.positions[i], spheres.velocities[i], spheres.mass[i]);
+        }
+        fs::write(path, res);
+
+    }
 }
 
 
@@ -86,18 +103,16 @@ fn impulse_manifolds(state: &mut State) {
         let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
                                   Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
 
-        state.spheres.positions2.query(r, &mut query_res);
+        // use -1 as omit elemnet since getting it is more work than just not processing, since we use j<=i continue
+        state.spheres.positions2.query(r, -1, &mut query_res);
 
         for &q_id in &query_res {
             ids.push(state.spheres.qt_id_to_index(q_id))
         }
-        //let mut ids : Vec::<usize> = near_element_ids.iter().map(|e_id| state.spheres.qt_id_to_index(*e_id)).collect();
 
-        //ids.sort();
+        ids.sort();
 
         //for j in (i + 1)..count {
-
-
         for &j in &ids {
             if j <= i{
                 continue;
@@ -111,9 +126,11 @@ fn impulse_manifolds(state: &mut State) {
                 //println!("sum_r, d = {:?}", (radius[i] + radius[j], dist));
                 //println!("p_i, p_j = {:?}", (pos[i], pos[j]));
 
+                //println!("{:?}", (vel[j],i, vel[j].y.is_infinite()));
                 let relative_vel = vel[j] - vel[i];
                 let col_norm : V3 = (pos[j] - pos[i]).normalize();
                 let pen_depth = dist - radius[i] + radius[j];
+
 
                 let vel_along_norm = relative_vel.dot(&col_norm);
 
@@ -130,6 +147,7 @@ fn impulse_manifolds(state: &mut State) {
                 let impulse : V3 = col_norm * impulse_scalar;
 
 
+
                 state.spheres.manifolds[i].vel_change -= 1.0/mass[i] * impulse;
                 state.spheres.manifolds[j].vel_change += 1.0/mass[j] * impulse;
 
@@ -143,8 +161,6 @@ fn impulse_manifolds(state: &mut State) {
             }
         }
     }
-
-    //res
 }
 
 
@@ -215,6 +231,7 @@ pub fn step(state: &mut State, dt: f32) {
     let count = state.spheres.count();
     // get acceleration of each ball, calculated from collision
 
+
     for i in 0..count {
         state.spheres.manifolds[i].vel_change.x = 0.0;
         state.spheres.manifolds[i].vel_change.y = 0.0;
@@ -226,8 +243,6 @@ pub fn step(state: &mut State, dt: f32) {
 
     }
 
-
-
     impulse_manifolds(state);
 
     impulse_walls(state);
@@ -236,8 +251,8 @@ pub fn step(state: &mut State, dt: f32) {
     let pos = &mut state.spheres.positions;
     let vel = &mut state.spheres.velocities;
 
-
     for i in 0..count {
+
         vel[i] += state.spheres.manifolds[i].vel_change;
         pos[i] += vel[i] * dt + state.spheres.manifolds[i].pos_correction;
     }
@@ -250,11 +265,11 @@ pub fn step(state: &mut State, dt: f32) {
 
 
 #[derive(Debug)]
-struct ActiveSpheres {
+pub struct ActiveSpheres {
     qt_id_to_index : HashMap::<i32, usize>,
     id_to_qt_id : HashMap::<EntityId, i32>,
     positions2: QuadTree::<EntityId>,
-    positions: Vec::<V3>,
+    pub positions: Vec::<V3>,
     velocities: Vec::<V3>,
     radius: Vec::<f32>,
     mass: Vec::<f32>,
@@ -333,9 +348,9 @@ impl ActiveSpheres {
         }
 
         self.positions2.cleanup();
-
-
     }
+
+
 
 }
 

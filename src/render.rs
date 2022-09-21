@@ -23,6 +23,8 @@ pub fn run_with_render(mut state: sim::State) {
     let width = sdl_setup.width;
 
     let mut camera = camera::Camera::new(width as f32, height as f32);
+
+    camera.set_zfar(500.0);
     let sphere_shader = create_sphere_shader(&gl);
     let cube_shader = create_cube_shader(&gl);
 
@@ -39,7 +41,7 @@ pub fn run_with_render(mut state: sim::State) {
     }
 
 
-    camera.move_to(na::Vector3::new(-6.0, 10.0, 0.0));
+    camera.move_to(na::Vector3::new(0.0, 40.0, 0.0));
     camera.look_at(na::Vector3::new(-6.0, 0.0, 0.0));
 
     let mut instant = Instant::now();
@@ -63,14 +65,20 @@ pub fn run_with_render(mut state: sim::State) {
 
     let mut camera_controller : camera::Controller = Default::default();
     let mut event_pump = sdl.event_pump().unwrap();
-    camera_controller.speed = 10.0;
+    camera_controller.speed = 40.0;
 
     let mut kb_map = setup_keyboard_mapping();
 
     let mut kb_state = KbState { state, paused: false };
 
+    let mut frame = 0;
     loop {
 
+        println!("{:?}", kb_state.state.spheres.positions);
+        if frame > 100 {
+
+            //break;
+        }
         for event in event_pump.poll_iter() {
             // maybe return consumed
             camera_controller.update_events(&sdl.mouse(), event.clone());
@@ -83,17 +91,19 @@ pub fn run_with_render(mut state: sim::State) {
         camera_controller.update_camera(&mut camera, delta);
 
 
+
         if !kb_state.paused {
 
-
-
-            accumulator += delta * speed;
-
+           accumulator += delta * speed;
+            /*
             // Simulation part
             while accumulator >= sim_step_time {
-                sim::step(&mut kb_state.state, sim_step_time);
+                //sim::step(&mut kb_state.state, sim_step_time);
                 accumulator -= sim_step_time;
             }
+            */
+            // simulate 1 step per frame, otherwise we might be too slow, if we cannot keep up
+            sim::step(&mut kb_state.state, sim_step_time);
         }
 
         // Rendering
@@ -117,6 +127,9 @@ pub fn run_with_render(mut state: sim::State) {
         render_walls(&kb_state.state, &ri);
 
         window.gl_swap_window();
+
+        frame +=1;
+
 
     }
 }
@@ -179,6 +192,7 @@ fn setup_keyboard_mapping() -> controller::ControllerMapping<KbState> {
     kb_map.exit(Keycode::Escape);
     kb_map.add_on_press(Keycode::R, reset);
     kb_map.add_on_press(P, pause);
+    kb_map.add_on_press(K, dump);
 
     kb_map
 }
@@ -186,8 +200,8 @@ fn setup_keyboard_mapping() -> controller::ControllerMapping<KbState> {
 
 
 struct KbState {
-    state:  sim::State,
-    paused: bool
+    pub state: sim::State,
+    pub paused: bool
 }
 
 fn reset(state: &mut KbState) {
@@ -196,6 +210,10 @@ fn reset(state: &mut KbState) {
 
 fn pause(state: &mut KbState) {
     state.paused = !state.paused;
+}
+
+fn dump(state: &mut KbState) {
+    state.state.dump("state.txt");
 }
 
 
