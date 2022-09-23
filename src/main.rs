@@ -56,7 +56,7 @@ fn wall_test() -> sim::State {
 fn flamegraph() {
     let mut state = sim::State::new();
 
-    add_grid(10, 30, &mut state);
+    add_grid(100, 100, &mut state);
 
     let mut time_inst = Instant::now();
 
@@ -69,7 +69,7 @@ fn flamegraph() {
         iters += 1;
         if time_inst.elapsed().as_millis() as f32 > 1000.0 {
             let ms_pr_iter = (time_inst.elapsed().as_millis() as f32) / (iters as f32) ;
-            println!("ms/iter: {:.2?}", ms_pr_iter);
+            println!("ms/iter: {:.2?}", iters);
             time_inst = Instant::now();
             iters = 0
         }

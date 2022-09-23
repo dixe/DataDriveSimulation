@@ -14,6 +14,7 @@ quadtree = { path = "../quadtree"}
 [features]
 oop = []
 sdl = ["gl_lib"]
+linear = []
 
 [profile.release]
 debug = true

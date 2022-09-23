@@ -76,92 +76,108 @@ struct Manifold {
     pos_correction: V3,
 }
 
+fn query_points(state: &mut State, i: usize, query_res: &mut Vec::<i32>, ids: &mut Vec::<usize>) {
+    query_res.clear();
+    ids.clear();
+
+    let pos = &state.spheres.positions;
+    let radius = &state.spheres.radius;
+
+    let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
+                              Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
+
+    // use -1 as omit elemnet since getting it is more work than just not processing, since we use j<=i continue
+    state.spheres.positions2.query(r, -1, query_res);
+
+    for q_id in query_res {
+        ids.push(state.spheres.qt_id_to_index(*q_id))
+    }
+
+    ids.sort();
+}
 
 
-fn impulse_manifolds(state: &mut State) {
+fn impulse_manifolds_linear(state: &mut State) {
+    let count = state.spheres.count();
+
+    for i in 0..count {
+        for j in (i + 1)..count {
+            calc(state,i,j);
+        }
+    }
+}
+
+fn impulse_manifolds_quadtree(state: &mut State) {
 
     // parially from
     //https://gamedevelopment.tutsplus.com/tutorials/how-to-create-a-custom-2d-physics-engine-the-basics-and-impulse-resolution--gamedev-6331
 
     let count = state.spheres.count();
 
-    //let mut res : Vec::<Manifold>= vec![Default::default(); count];
-
-   let pos = &state.spheres.positions;
-    let vel = &state.spheres.velocities;
-    let radius = &state.spheres.radius;
-    let mass = &state.spheres.mass;
-
     let mut query_res = vec![];
     let mut ids : Vec::<usize> = vec![];
 
     for i in 0..count {
 
-        query_res.clear();
-        ids.clear();
-
-        let r = Rect::from_points(Point { x: (pos[i].x - radius[i]) as i32, y: (pos[i].y - radius[i]) as i32},
-                                  Point { x: (pos[i].x + radius[i]) as i32, y: (pos[i].y + radius[i]) as i32});
-
-        // use -1 as omit elemnet since getting it is more work than just not processing, since we use j<=i continue
-        state.spheres.positions2.query(r, -1, &mut query_res);
-
-        for &q_id in &query_res {
-            ids.push(state.spheres.qt_id_to_index(q_id))
-        }
-
-        ids.sort();
-
-        //for j in (i + 1)..count {
+        query_points(state, i, &mut query_res, &mut ids);
         for &j in &ids {
             if j <= i{
                 continue;
             }
 
-
-            let dist = (pos[i]- pos[j]).norm();
-
-            if radius[i] + radius[j] >= dist {
-
-                //println!("sum_r, d = {:?}", (radius[i] + radius[j], dist));
-                //println!("p_i, p_j = {:?}", (pos[i], pos[j]));
-
-                //println!("{:?}", (vel[j],i, vel[j].y.is_infinite()));
-                let relative_vel = vel[j] - vel[i];
-                let col_norm : V3 = (pos[j] - pos[i]).normalize();
-                let pen_depth = dist - radius[i] + radius[j];
-
-
-                let vel_along_norm = relative_vel.dot(&col_norm);
-
-                if vel_along_norm > 0.0 {
-                    continue;
-                }
-
-                // can also be so each ball has its own, then use lowest
-                let resitution = 0.8; // elasicity e = rel_vel_after_col / rel_vel_before, so 1 is all energy preserved,
-
-                let mut impulse_scalar = -(1.0 + resitution) * vel_along_norm;
-                impulse_scalar /= 1.0/mass[i] + 1.0/mass[j];
-
-                let impulse : V3 = col_norm * impulse_scalar;
-
-
-
-                state.spheres.manifolds[i].vel_change -= 1.0/mass[i] * impulse;
-                state.spheres.manifolds[j].vel_change += 1.0/mass[j] * impulse;
-
-                let percent = 0.1; // between 0.2 and 0.8 usually
-                let correction : V3 = pen_depth / (1.0/mass[i] + 1.0/mass[j]) * percent * col_norm;
-
-                state.spheres.manifolds[i].pos_correction -= 1.0/mass[i] * correction;
-                state.spheres.manifolds[j].pos_correction += 1.0/mass[j] * correction;
-
-
-            }
+            calc(state,i,j);
         }
     }
 }
+
+fn calc(state: &mut State, i: usize, j: usize) {
+    let pos = &state.spheres.positions;
+    let vel = &state.spheres.velocities;
+    let radius = &state.spheres.radius;
+    let mass = &state.spheres.mass;
+
+    let dist = (pos[i]- pos[j]).norm();
+
+    if radius[i] + radius[j] >= dist {
+
+        //println!("sum_r, d = {:?}", (radius[i] + radius[j], dist));
+        //println!("p_i, p_j = {:?}", (pos[i], pos[j]));
+
+        //println!("{:?}", (vel[j],i, vel[j].y.is_infinite()));
+        let relative_vel = vel[j] - vel[i];
+        let col_norm : V3 = (pos[j] - pos[i]).normalize();
+        let pen_depth = dist - radius[i] + radius[j];
+
+
+        let vel_along_norm = relative_vel.dot(&col_norm);
+
+        if vel_along_norm > 0.0 {
+            return;
+        }
+
+        // can also be so each ball has its own, then use lowest
+        let resitution = 0.8; // elasicity e = rel_vel_after_col / rel_vel_before, so 1 is all energy preserved,
+
+        let mut impulse_scalar = -(1.0 + resitution) * vel_along_norm;
+        impulse_scalar /= 1.0/mass[i] + 1.0/mass[j];
+
+        let impulse : V3 = col_norm * impulse_scalar;
+
+
+
+        state.spheres.manifolds[i].vel_change -= 1.0/mass[i] * impulse;
+        state.spheres.manifolds[j].vel_change += 1.0/mass[j] * impulse;
+
+        let percent = 0.1; // between 0.2 and 0.8 usually
+        let correction : V3 = pen_depth / (1.0/mass[i] + 1.0/mass[j]) * percent * col_norm;
+
+        state.spheres.manifolds[i].pos_correction -= 1.0/mass[i] * correction;
+        state.spheres.manifolds[j].pos_correction += 1.0/mass[j] * correction;
+
+
+    }
+}
+
 
 
 
@@ -243,7 +259,11 @@ pub fn step(state: &mut State, dt: f32) {
 
     }
 
-    impulse_manifolds(state);
+    #[cfg(not(feature = "linear"))]
+    impulse_manifolds_quadtree(state);
+
+    #[cfg(feature = "linear")]
+    impulse_manifolds_linear(state);
 
     impulse_walls(state);
 
@@ -258,6 +278,7 @@ pub fn step(state: &mut State, dt: f32) {
     }
 
     // reorder quadtree
+    #[cfg(not(feature = "linear"))]
     state.spheres.order_tree();
 }
 
